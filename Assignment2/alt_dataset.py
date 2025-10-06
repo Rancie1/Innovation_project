@@ -92,6 +92,8 @@ X_test_tfidf = vectorizer.transform(X_test)
 
 # Final evaluation of models using unseen data in test set
 print("Test set evaluation:")
+print("Logistic Regression:\n")
 print(classification_report(y_test, logreg.predict(X_test_tfidf)))
+print("KNN:\n")
 print(classification_report(y_test, knn.predict(X_test_tfidf)))
 
