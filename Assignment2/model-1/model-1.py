@@ -11,87 +11,87 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.metrics import classification_report
 
+if __name__== "__main__":
+    # Read the parquet file
+    df = pd.read_parquet("model-1/data/train.parquet")
+    df = pd.read_parquet("model-1/data/test.parquet")
 
-# Read the parquet file
-df = pd.read_parquet("model-1/data/train.parquet")
-df = pd.read_parquet("model-1/data/test.parquet")
-
-# Save to CSV due to assignment requirement
-df.to_csv("model-1/data/train.csv", index=False)   
-df.to_csv("model-1/data/test.csv", index=False)
-
-
-# Load data
-train_df = pd.read_parquet("model-1/data/train.parquet")
-test_df = pd.read_parquet("model-1/data/test.parquet")
-
-# Clean data
-# Drop unnecessary columns
-train_df = df.drop(columns=["unique_id", "__index_level_0__"], errors="ignore", inplace=True)
-test_df = df.drop(columns=["unique_id", "__index_level_0__"], errors="ignore", inplace=True)
-
-# Drop rows with missing 'code' values
-train_df = df.dropna(subset=["code"])
-test_df = df.dropna(subset=["code"])
-
-# Remove duplicate code entries
-train_df = df.drop_duplicates(subset=["code"])
-test_df = df.drop_duplicates(subset=["code"])
+    # Save to CSV due to assignment requirement
+    df.to_csv("model-1/data/train.csv", index=False)   
+    df.to_csv("model-1/data/test.csv", index=False)
 
 
-# Basic data exploration
-print("Head of training data:")
-print(train_df.head())
-print("Head of test data:")
-print(test_df.head())
+    # Load data
+    train_df = pd.read_parquet("model-1/data/train.parquet")
+    test_df = pd.read_parquet("model-1/data/test.parquet")
+
+    # Clean data
+    # Drop unnecessary columns
+    train_df = df.drop(columns=["unique_id", "__index_level_0__"], errors="ignore", inplace=True)
+    test_df = df.drop(columns=["unique_id", "__index_level_0__"], errors="ignore", inplace=True)
+
+    # Drop rows with missing 'code' values
+    train_df = df.dropna(subset=["code"])
+    test_df = df.dropna(subset=["code"])
+
+    # Remove duplicate code entries
+    train_df = df.drop_duplicates(subset=["code"])
+    test_df = df.drop_duplicates(subset=["code"])
 
 
-# Assign features and target variable for training set
-X = train_df["code"]
-y = train_df["target"]
+    # Basic data exploration
+    print("Head of training data:")
+    print(train_df.head())
+    print("Head of test data:")
+    print(test_df.head())
 
 
-# Text vectorization for increased performance
-vectorizer = TfidfVectorizer(max_features=5000)  
-X_tfidf = vectorizer.fit_transform(X)
+    # Assign features and target variable for training set
+    X = train_df["code"]
+    y = train_df["target"]
 
 
-# Split data into training and validation sets (80% train, 20% val), random state for reproducibility
-X_train, X_val, y_train, y_val = train_test_split(
-    X_tfidf, y, test_size=0.2, random_state=42, stratify=y
-)
+    # Text vectorization for increased performance
+    vectorizer = TfidfVectorizer(max_features=5000)  
+    X_tfidf = vectorizer.fit_transform(X)
 
 
-
-# Logistic Regression model
-logreg = LogisticRegression(max_iter=1000)
-# Fit the model
-logreg.fit(X_train, y_train)
-# Report for training set showing precision, recall, f1-score
-print("Logistic Regression:\n", classification_report(y_val, logreg.predict(X_val)))
+    # Split data into training and validation sets (80% train, 20% val), random state for reproducibility
+    X_train, X_val, y_train, y_val = train_test_split(
+        X_tfidf, y, test_size=0.2, random_state=42, stratify=y
+    )
 
 
 
-# KNN model
-knn = KNeighborsClassifier(n_neighbors=5)
-# Fit the model
-knn.fit(X_train, y_train)
-# Report for training set showing precision, recall, f1-score
-print("KNN:\n", classification_report(y_val, knn.predict(X_val)))
+    # Logistic Regression model
+    logreg = LogisticRegression(max_iter=1000)
+    # Fit the model
+    logreg.fit(X_train, y_train)
+    # Report for training set showing precision, recall, f1-score
+    print("Logistic Regression:\n", classification_report(y_val, logreg.predict(X_val)))
+
+
+
+    # KNN model
+    knn = KNeighborsClassifier(n_neighbors=5)
+    # Fit the model
+    knn.fit(X_train, y_train)
+    # Report for training set showing precision, recall, f1-score
+    print("KNN:\n", classification_report(y_val, knn.predict(X_val)))
 
 
 
 
-# Assign features and target variable for test set
-X_test = test_df["code"]
-y_test = test_df["target"]
+    # Assign features and target variable for test set
+    X_test = test_df["code"]
+    y_test = test_df["target"]
 
-# Transform test set using the same vectorizer
-X_test_tfidf = vectorizer.transform(X_test)
+    # Transform test set using the same vectorizer
+    X_test_tfidf = vectorizer.transform(X_test)
 
 
-# Final evaluation of models using unseen data in test set
-print("Test set evaluation:")
-print(classification_report(y_test, logreg.predict(X_test_tfidf)))
-print(classification_report(y_test, knn.predict(X_test_tfidf)))
+    # Final evaluation of models using unseen data in test set
+    print("Test set evaluation:")
+    print(classification_report(y_test, logreg.predict(X_test_tfidf)))
+    print(classification_report(y_test, knn.predict(X_test_tfidf)))
 
