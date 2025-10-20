@@ -1,8 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import Any
 from model_service import ModelService
+from models import PredictRequest, PredictResponse, SelectModelRequest
 
 app = FastAPI(title="Assignment3 Backend", version="0.1.0")
 
@@ -20,15 +19,7 @@ app.add_middleware(
   allow_headers=["*"],
 )
 
-class PredictRequest(BaseModel):
-  code: str
 
-class PredictResponse(BaseModel):
-  prediction: Any
-  model_name: str
-
-class SelectModelRequest(BaseModel):
-  model_name: str
 
 model_service = ModelService()
 
