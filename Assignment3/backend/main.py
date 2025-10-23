@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from model_service import ModelService
-from models import PredictRequest, PredictResponse, SelectModelRequest
+from models.models import PredictRequest, PredictResponse, SelectModelRequest
 
 app = FastAPI(title="Assignment3 Backend", version="0.1.0")
 
