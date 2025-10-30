@@ -5,11 +5,12 @@ from model_loader import ModelLoader
 
 class ModelService:
   def __init__(self) -> None:
-    self._available: List[str] = ["baseline", "logistic_regression", "random_forest"]
+    self._available: List[str] = ["baseline", "logistic_regression", "random_forest", "model1_logreg", "model1_random_forest"]
     self.current_model_name: str = "baseline"
     self.current_model = None
     self.label_encoder = None
     self.target_names = []
+    self.model1_classes = None
     self.model_loader = ModelLoader()
     
     # Try to load pre-trained models
@@ -19,11 +20,22 @@ class ModelService:
     """Load pre-trained models if they exist."""
     try:
       models = self.model_loader.load_trained_models()
+      dynamic = []
       if models:
-        self._available = ["baseline"] + list(models.keys())
+        dynamic += list(models.keys())
         self.label_encoder = self.model_loader.label_encoder
         self.target_names = self.model_loader.target_names
-        print(f"Loaded {len(models)} pre-trained models: {list(models.keys())}")
+      # Model-1 artifacts (optional)
+      if os.path.exists("models/model1_logreg.pkl"):
+        dynamic.append("model1_logreg")
+      if os.path.exists("models/model1_random_forest.pkl"):
+        dynamic.append("model1_random_forest")
+      if os.path.exists("models/model1_classes.pkl"):
+        with open("models/model1_classes.pkl", "rb") as f:
+          self.model1_classes = pickle.load(f)
+      if dynamic:
+        self._available = ["baseline"] + sorted(set(dynamic), key=str)
+        print(f"Loaded pre-trained models: {self._available}")
       else:
         print("No pre-trained models found. Using baseline model.")
     except Exception as e:
@@ -50,48 +62,58 @@ class ModelService:
     else:
       self.current_model = None
 
+  def _py_int(self, value: Any) -> Any:
+    try:
+      return int(value)
+    except Exception:
+      return value
+
+  def _format_prediction(self, prediction: Any, proba: List[float] | None) -> Dict[str, Any]:
+    # Model-2 style labels
+    if self.current_model_name in ("logistic_regression", "random_forest") and self.target_names:
+      predicted_category = self.target_names[self._py_int(prediction)] if isinstance(prediction, (int,)) or str(prediction).isdigit() else self.target_names[int(prediction)]
+      return {
+        "predicted_category": predicted_category,
+        "confidence": float(max(proba)) if proba is not None else None,
+        "all_probabilities": {name: float(p) for name, p in zip(self.target_names, (proba or []))},
+        "model_used": self.current_model_name,
+      }
+    # Model-1 binary labels
+    if self.current_model_name in ("model1_logreg", "model1_random_forest") and self.model1_classes is not None:
+      py_label = self._py_int(prediction)
+      return {
+        "predicted_label": py_label if isinstance(py_label, int) else str(py_label),
+        "predicted_label_name": str(prediction),
+        "classes": list(map(str, self.model1_classes)),
+        "confidence": float(max(proba)) if proba is not None else None,
+        "model_used": self.current_model_name,
+      }
+    # Fallback generic
+    py_pred = self._py_int(prediction)
+    return {
+      "predicted": py_pred if isinstance(py_pred, int) else str(py_pred),
+      "confidence": float(max(proba)) if proba is not None else None,
+      "model_used": self.current_model_name,
+    }
+
   def predict(self, code: str) -> Dict[str, Any]:
     if self.current_model_name == "baseline" or self.current_model is None:
-      # Placeholder baseline: returns simple features of the snippet
       num_lines = code.count("\n") + (0 if code.endswith("\n") else 1 if code else 0)
       num_chars = len(code)
       return {
-        "score": num_chars,  # e.g., use length as a dummy score
-        "features": {
-          "num_lines": num_lines,
-          "num_chars": num_chars,
-        },
+        "score": num_chars,
+        "features": {"num_lines": num_lines, "num_chars": num_chars},
         "note": "baseline placeholder; replace with Assignment2 model inference",
       }
-    
     try:
-      # Use the trained model for prediction
-      prediction = self.current_model.predict([code])[0]
-      prediction_proba = self.current_model.predict_proba([code])[0]
-      
-      # Get the predicted category name
-      if self.label_encoder and self.target_names:
-        predicted_category = self.target_names[prediction]
-        confidence = max(prediction_proba)
-      else:
-        predicted_category = f"Category_{prediction}"
-        confidence = max(prediction_proba)
-      
-      return {
-        "predicted_category": predicted_category,
-        "confidence": float(confidence),
-        "all_probabilities": {
-          name: float(prob) for name, prob in zip(self.target_names, prediction_proba)
-        },
-        "model_used": self.current_model_name,
-        "features": {
-          "code_length": len(code),
-          "num_lines": code.count("\n") + 1,
-        }
-      }
+      y = self.current_model.predict([code])[0]
+      proba = None
+      if hasattr(self.current_model, "predict_proba"):
+        proba = self.current_model.predict_proba([code])[0]
+      resp = self._format_prediction(y, proba)
+      resp.update({
+        "features": {"code_length": len(code), "num_lines": code.count("\n") + (0 if code.endswith("\n") else 1 if code else 0)}
+      })
+      return resp
     except Exception as e:
-      return {
-        "error": f"Prediction failed: {str(e)}",
-        "model_used": self.current_model_name,
-        "fallback": "baseline"
-      }
+      return {"error": f"Prediction failed: {str(e)}", "model_used": self.current_model_name, "fallback": "baseline"}

@@ -82,12 +82,16 @@ class ModelLoader:
         """Load pre-trained models from disk."""
         models = {}
         
-        # Load models
+        # Load models (exclude non-estimator artifacts)
+        exclude = {'label_encoder.pkl', 'target_names.pkl', 'model1_classes.pkl'}
         for model_file in os.listdir(model_dir):
-            if model_file.endswith('.pkl') and model_file not in ['label_encoder.pkl', 'target_names.pkl']:
+            if model_file.endswith('.pkl') and model_file not in exclude:
                 model_name = model_file.replace('.pkl', '')
                 with open(f"{model_dir}/{model_file}", "rb") as f:
-                    models[model_name] = pickle.load(f)
+                    obj = pickle.load(f)
+                    # Only keep objects that look like estimators (have predict)
+                    if hasattr(obj, 'predict'):
+                        models[model_name] = obj
         
         # Load label encoder and target names
         if os.path.exists(f"{model_dir}/label_encoder.pkl"):
