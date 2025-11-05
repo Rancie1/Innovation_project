@@ -9,6 +9,19 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState(null);
+  const [taskType, setTaskType] = useState('severity'); // 'severity' | 'binary'
+
+  // Filter using backend IDs (underscored)
+  const severityModels = useMemo(() => models.filter(m => m === 'logistic_regression' || m === 'random_forest'), [models]);
+  const binaryModels = useMemo(() => models.filter(m => m === 'model1_logreg' || m === 'model1_random_forest'), [models]);
+  const visibleModels = taskType === 'severity' ? severityModels : binaryModels;
+
+  // Display names with spaces while keeping IDs under the hood
+  const displayName = (modelId) => {
+    if (modelId === 'model1_logreg') return 'logistic regression';
+    if (modelId === 'model1_random_forest') return 'random forest';
+    return String(modelId).replace(/_/g, ' ');
+  };
 
   const isCodeValid = useMemo(() => code.trim().length >= 5, [code]);
 
@@ -18,8 +31,20 @@ function App() {
       try {
         const data = await api.listModels();
         if (!isMounted) return;
-        setModels(data.available_models || []);
-        setCurrentModel(data.current_model || '');
+        const available = data.available_models || [];
+        setModels(available);
+        // Choose initial task/model
+        const hasSeverity = available.some(m => m === 'logistic_regression' || m === 'random_forest');
+        const initialTask = hasSeverity ? 'severity' : 'binary';
+        setTaskType(initialTask);
+        const candidates = hasSeverity
+          ? available.filter(m => m === 'logistic_regression' || m === 'random_forest')
+          : available.filter(m => m === 'model1_logreg' || m === 'model1_random_forest');
+        const chosen = candidates[0] || available[0] || '';
+        if (chosen) {
+          setCurrentModel(chosen);
+          try { await api.selectModel(chosen); } catch {}
+        }
       } catch (e) {
         // eslint-disable-next-line no-console
         console.error(e);
@@ -27,6 +52,15 @@ function App() {
     })();
     return () => { isMounted = false; };
   }, []);
+
+  async function applyModel(name) {
+    setCurrentModel(name);
+    try {
+      await api.selectModel(name);
+    } catch (e) {
+      setError('Failed to switch model.');
+    }
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -49,11 +83,17 @@ function App() {
 
   async function handleModelChange(e) {
     const name = e.target.value;
-    setCurrentModel(name);
-    try {
-      await api.selectModel(name);
-    } catch (e) {
-      setError('Failed to switch model.');
+    await applyModel(name);
+  }
+
+  async function handleTaskToggle(nextTask) {
+    if (taskType === nextTask) return;
+    setTaskType(nextTask);
+    // pick first available model for that task and apply
+    const candidates = (nextTask === 'severity') ? severityModels : binaryModels;
+    const chosen = candidates[0] || '';
+    if (chosen) {
+      await applyModel(chosen);
     }
   }
 
@@ -67,10 +107,21 @@ function App() {
       <main className="content">
         <form className="card" onSubmit={handleSubmit} noValidate>
           <div className="row">
+            <div className="segmented" role="tablist" aria-label="Task type">
+              <button type="button" role="tab" aria-selected={taskType==='severity'} className={`chip ${taskType==='severity' ? 'active' : ''}`} onClick={() => handleTaskToggle('severity')}>
+                Severity type
+              </button>
+              <button type="button" role="tab" aria-selected={taskType==='binary'} className={`chip ${taskType==='binary' ? 'active' : ''}`} onClick={() => handleTaskToggle('binary')}>
+                Binary
+              </button>
+            </div>
+          </div>
+
+          <div className="row">
             <label htmlFor="model" className="label">Model</label>
             <select id="model" className="select" value={currentModel} onChange={handleModelChange} aria-label="Select model">
-              {models.map((m) => (
-                <option key={m} value={m}>{m}</option>
+              {visibleModels.map((m) => (
+                <option key={m} value={m}>{displayName(m)}</option>
               ))}
             </select>
           </div>

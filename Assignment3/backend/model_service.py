@@ -5,8 +5,8 @@ from model_loader import ModelLoader
 
 class ModelService:
   def __init__(self) -> None:
-    self._available: List[str] = ["baseline", "logistic_regression", "random_forest", "model1_logreg", "model1_random_forest"]
-    self.current_model_name: str = "baseline"
+    self._available: List[str] = ["logistic_regression", "random_forest", "model1_logreg", "model1_random_forest"]
+    self.current_model_name: str | None = None
     self.current_model = None
     self.label_encoder = None
     self.target_names = []
@@ -20,7 +20,7 @@ class ModelService:
     """Load pre-trained models if they exist."""
     try:
       models = self.model_loader.load_trained_models()
-      dynamic = []
+      dynamic: List[str] = []
       if models:
         dynamic += list(models.keys())
         self.label_encoder = self.model_loader.label_encoder
@@ -34,12 +34,14 @@ class ModelService:
         with open("models/model1_classes.pkl", "rb") as f:
           self.model1_classes = pickle.load(f)
       if dynamic:
-        self._available = ["baseline"] + sorted(set(dynamic), key=str)
-        print(f"Loaded pre-trained models: {self._available}")
+        self._available = sorted(set(dynamic), key=str)
+        # Auto-select first available model
+        self.select_model(self._available[0])
+        print(f"Loaded pre-trained models: {self._available}; selected '{self.current_model_name}'")
       else:
-        print("No pre-trained models found. Using baseline model.")
+        print("No pre-trained models found. Please train models before predicting.")
     except Exception as e:
-      print(f"Could not load pre-trained models: {e}. Using baseline model.")
+      print(f"Could not load pre-trained models: {e}. Please train models before predicting.")
 
   def available_models(self) -> List[str]:
     return list(self._available)
@@ -51,15 +53,12 @@ class ModelService:
     self.current_model_name = model_name
     
     # Load the selected model
-    if model_name != "baseline":
-      try:
-        with open(f"models/{model_name}.pkl", "rb") as f:
-          self.current_model = pickle.load(f)
-        print(f"Loaded model: {model_name}")
-      except Exception as e:
-        print(f"Could not load model {model_name}: {e}")
-        self.current_model = None
-    else:
+    try:
+      with open(f"models/{model_name}.pkl", "rb") as f:
+        self.current_model = pickle.load(f)
+      print(f"Loaded model: {model_name}")
+    except Exception as e:
+      print(f"Could not load model {model_name}: {e}")
       self.current_model = None
 
   def _py_int(self, value: Any) -> Any:
@@ -69,13 +68,22 @@ class ModelService:
       return value
 
   def _format_prediction(self, prediction: Any, proba: List[float] | None) -> Dict[str, Any]:
+    # Normalize proba to a plain Python list if present
+    proba_list: List[float] = []
+    if proba is not None:
+      try:
+        proba_list = [float(x) for x in list(proba)]
+      except Exception:
+        proba_list = []
+
     # Model-2 style labels
     if self.current_model_name in ("logistic_regression", "random_forest") and self.target_names:
-      predicted_category = self.target_names[self._py_int(prediction)] if isinstance(prediction, (int,)) or str(prediction).isdigit() else self.target_names[int(prediction)]
+      idx = self._py_int(prediction)
+      predicted_category = self.target_names[idx] if isinstance(idx, int) and 0 <= idx < len(self.target_names) else str(prediction)
       return {
         "predicted_category": predicted_category,
-        "confidence": float(max(proba)) if proba is not None else None,
-        "all_probabilities": {name: float(p) for name, p in zip(self.target_names, (proba or []))},
+        "confidence": (max(proba_list) if proba_list else None),
+        "all_probabilities": {name: p for name, p in zip(self.target_names, proba_list)},
         "model_used": self.current_model_name,
       }
     # Model-1 binary labels
@@ -85,26 +93,20 @@ class ModelService:
         "predicted_label": py_label if isinstance(py_label, int) else str(py_label),
         "predicted_label_name": str(prediction),
         "classes": list(map(str, self.model1_classes)),
-        "confidence": float(max(proba)) if proba is not None else None,
+        "confidence": (max(proba_list) if proba_list else None),
         "model_used": self.current_model_name,
       }
     # Fallback generic
     py_pred = self._py_int(prediction)
     return {
       "predicted": py_pred if isinstance(py_pred, int) else str(py_pred),
-      "confidence": float(max(proba)) if proba is not None else None,
+      "confidence": (max(proba_list) if proba_list else None),
       "model_used": self.current_model_name,
     }
 
   def predict(self, code: str) -> Dict[str, Any]:
-    if self.current_model_name == "baseline" or self.current_model is None:
-      num_lines = code.count("\n") + (0 if code.endswith("\n") else 1 if code else 0)
-      num_chars = len(code)
-      return {
-        "score": num_chars,
-        "features": {"num_lines": num_lines, "num_chars": num_chars},
-        "note": "baseline placeholder; replace with Assignment2 model inference",
-      }
+    if self.current_model is None or self.current_model_name is None:
+      return {"error": "No model is loaded. Please train/select a model.", "model_used": None}
     try:
       y = self.current_model.predict([code])[0]
       proba = None
@@ -116,4 +118,4 @@ class ModelService:
       })
       return resp
     except Exception as e:
-      return {"error": f"Prediction failed: {str(e)}", "model_used": self.current_model_name, "fallback": "baseline"}
+      return {"error": f"Prediction failed: {str(e)}", "model_used": self.current_model_name}

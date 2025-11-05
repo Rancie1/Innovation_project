@@ -9,6 +9,7 @@ frontend/.env.*
 frontend/npm-debug.log*
 frontend/yarn-debug.log*
 frontend/yarn-error.log*
+frontend/.cache/
 
 # Python / FastAPI (backend)
 backend/.venv/
@@ -17,6 +18,10 @@ backend/*.pyc
 backend/.pytest_cache/
 backend/.mypy_cache/
 backend/.ruff_cache/
+backend/.cache/
+
+# Generic caches
+**/.cache/
 
 # Model artifacts (large/binary)
 backend/models/*.pkl

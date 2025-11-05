@@ -14,7 +14,7 @@ Assignment3/
 
 ### 1) Setup
 ```bash
-cd /Users/nathanrancie/Desktop/Innovation/Innovation_project/Assignment3/backend
+cd /Innovation_project/Assignment3/backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
@@ -64,12 +64,13 @@ curl -X POST http://localhost:8000/predict \
 ### Notes
 - CORS is enabled for `http://localhost:3000` so the React dev server can call the API.
 - If you change model artifacts, restart the API to pick them up.
+- The backend auto‑selects the first available trained model at startup.
 
 ## Frontend (React)
 
 ### 1) Setup and run
 ```bash
-cd /Users/nathanrancie/Desktop/Innovation/Innovation_project/Assignment3/frontend
+cd /Innovation_project/Assignment3/frontend
 npm install
 npm start
 ```
