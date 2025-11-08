@@ -1,0 +1,88 @@
+/* ThemeToggle.css */
+
+.theme-toggle-container {
+  display: flex;
+  align-items: center;
+}
+
+.theme-toggle-button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  transition: background 0.2s ease;
+}
+
+.theme-toggle-button:hover {
+  background: var(--bg-tertiary);
+}
+
+.toggle-track {
+  width: 50px;
+  height: 26px;
+  background: var(--input-border);
+  border-radius: 13px;
+  position: relative;
+  transition: all 0.3s ease;
+  border: 2px solid var(--border-color);
+}
+
+.toggle-track.dark {
+  background: #333;
+  border-color: var(--text-accent);
+}
+
+.toggle-track.light {
+  background: #cbd5e0;
+  border-color: #00a86b;
+}
+
+.toggle-thumb {
+  position: absolute;
+  top: 1px;
+  width: 20px;
+  height: 20px;
+  background: var(--bg-secondary);
+  border-radius: 50%;
+  transition: transform 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 4px var(--shadow);
+}
+
+.toggle-track.dark .toggle-thumb {
+  transform: translateX(2px);
+  background: var(--text-accent);
+}
+
+.toggle-track.light .toggle-thumb {
+  transform: translateX(26px);
+  background: #00a86b;
+}
+
+.icon {
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.toggle-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-family: 'Fira Code', monospace;
+}
+
+@media (max-width: 768px) {
+  .toggle-label {
+    display: none;
+  }
+}
