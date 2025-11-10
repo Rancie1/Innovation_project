@@ -89,11 +89,28 @@ class ModelService:
     # Model-1 binary labels
     if self.current_model_name in ("model1_logreg", "model1_random_forest") and self.model1_classes is not None:
       py_label = self._py_int(prediction)
+      
+      # Map numeric labels to human-readable names
+      label_map = {0: "Safe", 1: "Unsafe"}
+      label_name = label_map.get(py_label, str(prediction))
+      
+      # Create all_probabilities dict for binary classification with readable names
+      all_probabilities = {}
+      if proba_list and len(proba_list) == len(self.model1_classes):
+        for i, class_name in enumerate(self.model1_classes):
+          # Map numeric class to readable name
+          class_key = label_map.get(self._py_int(class_name), str(class_name))
+          all_probabilities[class_key] = proba_list[i]
+      
+      # Map classes list to readable names
+      readable_classes = [label_map.get(self._py_int(c), str(c)) for c in self.model1_classes]
+      
       return {
         "predicted_label": py_label if isinstance(py_label, int) else str(py_label),
-        "predicted_label_name": str(prediction),
-        "classes": list(map(str, self.model1_classes)),
+        "predicted_label_name": label_name,
+        "classes": readable_classes,
         "confidence": (max(proba_list) if proba_list else None),
+        "all_probabilities": all_probabilities,
         "model_used": self.current_model_name,
       }
     # Fallback generic

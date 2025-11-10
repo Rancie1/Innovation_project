@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import VulnerabilityDashboard from './components/VulnerabilityDashboard';
 import CodeInputForm from './components/CodeInputForm';
@@ -31,6 +31,15 @@ function App() {
   const [availableModels, setAvailableModels] = useState([]);
   const [currentModel, setCurrentModel] = useState(null);
   const [backendStatus, setBackendStatus] = useState('checking');
+  
+  // Classification type state - 'severity' or 'binary'
+  const [classificationType, setClassificationType] = useState(() => {
+    const savedType = localStorage.getItem('classificationType');
+    return savedType || 'severity';
+  });
+
+  // Info modal state
+  const [infoModal, setInfoModal] = useState(null); // 'severity', 'binary', or null
 
   // Apply theme to document
   useEffect(() => {
@@ -38,11 +47,85 @@ function App() {
     localStorage.setItem('theme', theme);
   }, [theme]);
 
-  // Check backend health on mount
+  // Save classification type to localStorage
   useEffect(() => {
-    checkBackendHealth();
-    fetchAvailableModels();
+    localStorage.setItem('classificationType', classificationType);
+  }, [classificationType]);
+
+  /**
+   * Format model name for display
+   */
+  const formatModelName = (modelName) => {
+    const nameMap = {
+      'logistic_regression': 'Logistic Regression',
+      'random_forest': 'Random Forest',
+      'model1_logreg': 'Logistic Regression',
+      'model1_random_forest': 'Random Forest'
+    };
+    return nameMap[modelName] || modelName;
+  };
+
+  /**
+   * Switch to a different model
+   */
+  const handleModelChange = useCallback(async (modelName) => {
+    try {
+      setLoading(true);
+      await axios.put('http://localhost:8000/model', {
+        model_name: modelName
+      });
+      setCurrentModel(modelName);
+      setError(null);
+    } catch (err) {
+      setError(`Failed to switch model: ${err.response?.data?.detail || err.message}`);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  /**
+   * Filter models based on classification type
+   */
+  const getFilteredModels = useCallback((allModels) => {
+    if (classificationType === 'severity') {
+      return allModels.filter(model => 
+        model === 'logistic_regression' || model === 'random_forest'
+      );
+    } else {
+      return allModels.filter(model => 
+        model === 'model1_logreg' || model === 'model1_random_forest'
+      );
+    }
+  }, [classificationType]);
+
+  /**
+   * Fetch available models from backend
+   */
+  const fetchAvailableModels = useCallback(async () => {
+    try {
+      const response = await axios.get('http://localhost:8000/models');
+      const allModels = response.data.available_models || [];
+      setAvailableModels(allModels);
+      
+      // Filter models based on current classification type
+      const filteredModels = getFilteredModels(allModels);
+      
+      // If current model is not in filtered list, switch to first available
+      const currentModelFromBackend = response.data.current_model;
+      if (filteredModels.length > 0) {
+        if (filteredModels.includes(currentModelFromBackend)) {
+          setCurrentModel(currentModelFromBackend);
+        } else {
+          // Auto-select first model of the current classification type
+          await handleModelChange(filteredModels[0]);
+        }
+      } else {
+        setCurrentModel(null);
+      }
+    } catch (err) {
+      console.error('Failed to fetch models:', err);
+    }
+  }, [getFilteredModels, handleModelChange]);
 
   /**
    * Check if backend is running
@@ -61,36 +144,26 @@ function App() {
     }
   };
 
-  /**
-   * Fetch available models from backend
-   */
-  const fetchAvailableModels = async () => {
-    try {
-      const response = await axios.get('http://localhost:8000/models');
-      setAvailableModels(response.data.available_models || []);
-      setCurrentModel(response.data.current_model);
-    } catch (err) {
-      console.error('Failed to fetch models:', err);
-    }
-  };
+  // Check backend health on mount
+  useEffect(() => {
+    checkBackendHealth();
+    fetchAvailableModels();
+  }, [fetchAvailableModels]);
 
-  /**
-   * Switch to a different model
-   */
-  const handleModelChange = async (modelName) => {
-    try {
-      setLoading(true);
-      await axios.put('http://localhost:8000/model', {
-        model_name: modelName
-      });
-      setCurrentModel(modelName);
-      setError(null);
-    } catch (err) {
-      setError(`Failed to switch model: ${err.response?.data?.detail || err.message}`);
-    } finally {
-      setLoading(false);
+  // Refetch and filter models when classification type changes
+  useEffect(() => {
+    if (availableModels.length > 0) {
+      const filteredModels = getFilteredModels(availableModels);
+      if (filteredModels.length > 0) {
+        // Auto-select first model of the new classification type
+        if (!filteredModels.includes(currentModel)) {
+          handleModelChange(filteredModels[0]);
+        }
+      }
     }
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [classificationType]);
+
 
   /**
    * Submit code for vulnerability prediction
@@ -135,7 +208,10 @@ function App() {
       // Add to history
       const historyEntry = {
         timestamp: new Date().toLocaleTimeString(),
-        category: result.prediction.predicted_category || 'Unknown',
+        category: result.prediction.predicted_category || 
+                  result.prediction.predicted_label_name || 
+                  result.prediction.predicted_label || 
+                  'Unknown',
         confidence: ((result.prediction.confidence || 0) * 100).toFixed(1)
       };
 
@@ -162,6 +238,13 @@ function App() {
    */
   const toggleTheme = () => {
     setTheme(prevTheme => prevTheme === 'dark' ? 'light' : 'dark');
+  };
+
+  /**
+   * Switch classification type
+   */
+  const handleClassificationTypeChange = (type) => {
+    setClassificationType(type);
   };
 
   /**
@@ -196,23 +279,127 @@ function App() {
       </header>
 
       <main className="app-main">
-        {/* Model selector */}
-        {availableModels.length > 0 && (
-          <div className="model-selector-container">
-            <label htmlFor="model-select">Active Model:</label>
-            <select 
-              id="model-select"
-              value={currentModel || ''} 
-              onChange={(e) => handleModelChange(e.target.value)}
-              disabled={loading}
-              className="model-select"
-            >
-              {availableModels.map(model => (
-                <option key={model} value={model}>{model}</option>
-              ))}
-            </select>
+        {/* Classification Type Selector */}
+        <div className="classification-type-container">
+          <label className="classification-type-label">Classification Type:</label>
+          <div className="classification-type-buttons">
+            <div className="classification-type-group">
+              <button
+                type="button"
+                className={`classification-type-btn ${classificationType === 'severity' ? 'active' : ''}`}
+                onClick={() => handleClassificationTypeChange('severity')}
+                disabled={loading}
+              >
+                Severity Type Classification
+              </button>
+              <button
+                type="button"
+                className="info-btn"
+                onClick={() => setInfoModal(infoModal === 'severity' ? null : 'severity')}
+                disabled={loading}
+                aria-label="Info about Severity Type Classification"
+                title="Info about Severity Type Classification"
+              >
+                ?
+              </button>
+            </div>
+            <div className="classification-type-group">
+              <button
+                type="button"
+                className={`classification-type-btn ${classificationType === 'binary' ? 'active' : ''}`}
+                onClick={() => handleClassificationTypeChange('binary')}
+                disabled={loading}
+              >
+                Binary Classification
+              </button>
+              <button
+                type="button"
+                className="info-btn"
+                onClick={() => setInfoModal(infoModal === 'binary' ? null : 'binary')}
+                disabled={loading}
+                aria-label="Info about Binary Classification"
+                title="Info about Binary Classification"
+              >
+                ?
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Info Modal */}
+        {infoModal && (
+          <div className="info-modal-overlay" onClick={() => setInfoModal(null)}>
+            <div className="info-modal" onClick={(e) => e.stopPropagation()}>
+              <button
+                className="info-modal-close"
+                onClick={() => setInfoModal(null)}
+                aria-label="Close info"
+              >
+                ×
+              </button>
+              <h3 className="info-modal-title">
+                {infoModal === 'severity' ? 'Severity Type Classification' : 'Binary Classification'}
+              </h3>
+              <div className="info-modal-content">
+                {infoModal === 'severity' ? (
+                  <>
+                    <p><strong>Input:</strong></p>
+                    <p>Code snippets that may contain various types of security vulnerabilities. The model analyzes the code to identify specific Common Weakness Enumeration (CWE) categories.</p>
+                    <p><strong>Output:</strong></p>
+                    <p>Predicts the specific CWE vulnerability category (e.g., CWE-79, CWE-89, CWE-22) with confidence scores and probability distributions across all possible categories. Provides detailed multi-class classification results showing which vulnerability type is most likely present.</p>
+                    <p><strong>Models Available:</strong></p>
+                    <ul>
+                      <li>Logistic Regression</li>
+                      <li>Random Forest</li>
+                    </ul>
+                  </>
+                ) : (
+                  <>
+                    <p><strong>Input:</strong></p>
+                    <p>Code snippets that need to be classified as either safe or unsafe. The model performs a binary classification to determine if the code contains any security vulnerability.</p>
+                    <p><strong>Output:</strong></p>
+                    <p>Classifies code as either <strong>Safe</strong> or <strong>Unsafe</strong> with confidence scores and probability distributions for both classes. Provides a simple binary decision indicating whether the code is vulnerable or not, without specifying the exact vulnerability type.</p>
+                    <p><strong>Models Available:</strong></p>
+                    <ul>
+                      <li>Logistic Regression</li>
+                      <li>Random Forest</li>
+                    </ul>
+                  </>
+                )}
+              </div>
+            </div>
           </div>
         )}
+
+        {/* Model selector */}
+        {availableModels.length > 0 && (() => {
+          const filteredModels = getFilteredModels(availableModels);
+          return filteredModels.length > 0 ? (
+            <div className="model-selector-container">
+              <label htmlFor="model-select">Active Model:</label>
+              <select 
+                id="model-select"
+                value={currentModel || ''} 
+                onChange={(e) => handleModelChange(e.target.value)}
+                disabled={loading}
+                className="model-select"
+              >
+                {filteredModels.map(model => (
+                  <option key={model} value={model}>{formatModelName(model)}</option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div className="model-selector-container">
+              <div className="no-models-message">
+                No {classificationType === 'severity' ? 'severity type' : 'binary'} models available.
+                {classificationType === 'severity' 
+                  ? ' Please ensure logistic_regression or random_forest models are loaded.'
+                  : ' Please ensure model1_logreg or model1_random_forest models are loaded.'}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Error display */}
         {error && (
