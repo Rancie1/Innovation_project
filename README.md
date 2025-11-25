@@ -216,7 +216,7 @@ Potential improvements for the system:
 
 ## 📝 License
 
-Built by Nathan Rancie as part of the Innovation Project.
+Built by Nathan Rancie, Andrew Nguyen and Lyhongleak Chhunny as part of the Innovation Project.
 
 ## 🤝 Contributing
 
